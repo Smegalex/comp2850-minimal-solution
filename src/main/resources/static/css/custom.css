@@ -272,3 +272,35 @@ select:focus {
     display: none;
   }
 }
+
+button[type="submit"]:hover,
+button:hover {
+  transition: background-color 150ms ease;
+}
+
+.confirm-button{
+  background: #06B211;
+  color: black !important;
+}
+
+.confirm-button:hover{
+  background: #0FD21C;
+}
+
+.danger-button{
+  background: #FF0000;
+  color: black !important;
+}
+
+.danger-button:hover{
+  background: #FF4747;
+}
+
+.neutral-button{
+  background: #BFBFBF;
+  color: black !important;
+}
+
+.neutral-button:hover{
+  background: #E8E8E8;
+}

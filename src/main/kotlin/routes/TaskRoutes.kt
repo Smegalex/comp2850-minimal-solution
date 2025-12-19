@@ -24,6 +24,7 @@ import utils.logValidationError
 import utils.timed
 
 private const val PAGE_SIZE = 10
+private const val DEFAULT_ORDER = "oldest"
 
 private data class PaginatedTasks(
     val page: Page<Map<String, Any>>,
@@ -51,7 +52,8 @@ private suspend fun ApplicationCall.handleTaskList(store: TaskStore) {
     timed("T0_list", jsMode()) {
         val query = requestedQuery()
         val page = requestedPage()
-        val paginated = paginateTasks(store, query, page)
+        val order = requestedOrder()
+        val paginated = paginateTasks(store, query, page, order)
         val html = renderTemplate("tasks/index.peb", paginated.context)
         respondText(html, ContentType.Text.Html)
     }
@@ -64,12 +66,13 @@ private suspend fun ApplicationCall.handleTaskFragment(store: TaskStore) {
     timed("T1_filter", jsMode()) {
         val query = requestedQuery()
         val page = requestedPage()
+        val order = requestedOrder()
         if (!isHtmxRequest()) {
-            respondRedirect(redirectPath(query, page))
+            respondRedirect(redirectPath(query, page, order))
             return@timed
         }
 
-        val paginated = paginateTasks(store, query, page)
+        val paginated = paginateTasks(store, query, page, order)
         val statusHtml = filterStatusFragment(query, paginated.page.totalItems)
         respondTaskArea(paginated, statusHtml)
     }
@@ -83,10 +86,11 @@ private suspend fun ApplicationCall.handleCreateTask(store: TaskStore) {
         val params = receiveParameters()
         val title = params["title"]?.trim() ?: ""
         val query = params["q"].toQuery()
+        val order = params["order"].toOrder()
 
         when (val validation = Task.validate(title)) {
-            is ValidationResult.Error -> handleCreateTaskError(store, title, query, validation)
-            ValidationResult.Success -> handleCreateTaskSuccess(store, title, query)
+            is ValidationResult.Error -> handleCreateTaskError(store, title, query, order, validation)
+            ValidationResult.Success -> handleCreateTaskSuccess(store, title, query, order)
         }
     }
 }
@@ -95,6 +99,7 @@ private suspend fun ApplicationCall.handleCreateTaskError(
     store: TaskStore,
     title: String,
     query: String,
+    order: String,
     validation: ValidationResult.Error,
 ) {
     val outcome =
@@ -106,11 +111,11 @@ private suspend fun ApplicationCall.handleCreateTaskError(
         }
     logValidationError("T3_add", outcome)
     if (isHtmxRequest()) {
-        val paginated = paginateTasks(store, query, 1)
+        val paginated = paginateTasks(store, query, 1, order)
         val statusHtml = messageStatusFragment(validation.message, isError = true)
         respondTaskArea(paginated, statusHtml)
     } else {
-        response.headers.append("Location", redirectPath(query, 1))
+        response.headers.append("Location", redirectPath(query, 1, order))
         respond(HttpStatusCode.SeeOther)
     }
 }
@@ -119,19 +124,20 @@ private suspend fun ApplicationCall.handleCreateTaskSuccess(
     store: TaskStore,
     title: String,
     query: String,
+    order: String,
 ) {
     val task = Task(title = title)
     store.add(task)
 
     if (isHtmxRequest()) {
-        val paginated = paginateTasks(store, query, 1)
+        val paginated = paginateTasks(store, query, 1, order)
         val statusHtml =
             messageStatusFragment(
                 """Task "${task.title}" added successfully.""",
             )
         respondTaskArea(paginated, statusHtml, htmxTrigger = "task-added")
     } else {
-        response.headers.append("Location", redirectPath(query, 1))
+        response.headers.append("Location", redirectPath(query, 1, order))
         respond(HttpStatusCode.SeeOther)
     }
 }
@@ -230,17 +236,20 @@ private fun paginateTasks(
     store: TaskStore,
     query: String,
     page: Int,
+    order: String = DEFAULT_ORDER,
 ): PaginatedTasks {
     val tasks =
         (if (query.isBlank()) store.getAll() else store.search(query))
             .map { it.toPebbleContext() }
-    val pageData = Page.paginate(tasks, currentPage = page, pageSize = PAGE_SIZE)
+    // If order == "newest" we want newest-first, which means reverse the source list
+    val pageData = Page.paginate(tasks, currentPage = page, pageSize = PAGE_SIZE, reverse = (order == "newest"))
 
     // Create context with both flat keys (for backwards compatibility) and nested page object (for templates)
     val context =
         pageData.toPebbleContext("tasks") +
             mapOf(
                 "query" to query,
+                "order" to order,
                 "page" to
                     mapOf(
                         "items" to pageData.items,
@@ -251,6 +260,10 @@ private fun paginateTasks(
             )
     return PaginatedTasks(pageData, context)
 }
+
+private fun String?.toOrder(): String = this?.trim()?.lowercase()?.takeIf { it == "newest" || it == "oldest" } ?: DEFAULT_ORDER
+
+private fun ApplicationCall.requestedOrder(): String = request.queryParameters["order"].toOrder()
 
 private suspend fun ApplicationCall.respondTaskArea(
     paginated: PaginatedTasks,
@@ -414,6 +427,18 @@ private fun redirectPath(
     val params = mutableListOf<String>()
     if (query.isNotBlank()) params += "q=${query.encodeURLParameter()}"
     if (page > 1) params += "page=$page"
+    return if (params.isEmpty()) "/tasks" else "/tasks?${params.joinToString("&")}"
+}
+
+private fun redirectPath(
+    query: String,
+    page: Int,
+    order: String = DEFAULT_ORDER,
+): String {
+    val params = mutableListOf<String>()
+    if (query.isNotBlank()) params += "q=${query.encodeURLParameter()}"
+    if (page > 1) params += "page=$page"
+    if (order != DEFAULT_ORDER) params += "order=${order.encodeURLParameter()}"
     return if (params.isEmpty()) "/tasks" else "/tasks?${params.joinToString("&")}"
 }
 

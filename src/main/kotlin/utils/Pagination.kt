@@ -79,8 +79,10 @@ data class Page<T>(
             items: List<T>,
             currentPage: Int = 1,
             pageSize: Int = 10,
+            reverse: Boolean = false,
         ): Page<T> {
-            val totalItems = items.size
+            val source = if (reverse) items.asReversed() else items
+            val totalItems = source.size
             val totalPages = if (totalItems == 0) 1 else (totalItems + pageSize - 1) / pageSize
 
             // Clamp current page to valid range
@@ -92,7 +94,7 @@ data class Page<T>(
 
             val pageItems =
                 if (startIndex < totalItems) {
-                    items.subList(startIndex, endIndex)
+                    source.subList(startIndex, endIndex)
                 } else {
                     emptyList()
                 }

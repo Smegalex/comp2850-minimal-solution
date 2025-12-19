@@ -59,7 +59,7 @@
 
     {# Search/Filter Tasks Form - Week 8 #}
     <section aria-labelledby="search-heading">
-        <h2 id="search-heading">Filter Tasks</h2>
+        <h2 id="search-heading">Filter Tasks </h2>
 
         <form action="/tasks" method="get"
               hx-get="/tasks/fragment"

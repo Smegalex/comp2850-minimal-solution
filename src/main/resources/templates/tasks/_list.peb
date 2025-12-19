@@ -1,7 +1,27 @@
+{# Ordering toggle: newest/oldest by time added. Uses HTMX for live fragment updates and a no-JS href fallback. #}
+<div class="order-toggle" aria-hidden="false">
+  {% if order == 'newest' %}
+    {% set nextOrder = 'oldest' %}
+  {% else %}
+    {% set nextOrder = 'newest' %}
+  {% endif %}
+
+  <a
+    class="order-toggle-link"
+    href="/tasks?q={{ query|default('') }}&page={{ page.currentPage }}&order={{ nextOrder }}"
+    hx-get="/tasks/fragment?q={{ query|default('') }}&page={{ page.currentPage }}&order={{ nextOrder }}"
+    hx-target="#task-area"
+    hx-push-url="true"
+    role="button"
+    aria-pressed="{% if order == 'newest' %}true{% else %}false{% endif %}">
+    {% if order == 'newest' %}Showing newest first (click to show oldest){% else %}Showing oldest first (click to show newest){% endif %}
+  </a>
+</div>
+
 <ul id="task-list" aria-describedby="result-count">
   {% for task in page.items %}
     {% include "tasks/_item.peb" with {"task": task} %}
   {% endfor %}
 </ul>
+{# WCAG 4.1.3: Result count for people using assistive technology #}
 <p id="result-count" class="visually-hidden">Showing {{ page.items|length }} of {{ page.totalItems }}{% if query %} matching "{{ query }}"{% endif %}</p>
-
